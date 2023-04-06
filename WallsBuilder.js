@@ -92,14 +92,24 @@ alignTo = function (value, alignment) {
     return Math.round(value / alignment) * alignment;
 }
 
-getBoundingBox = function (graphic) {
-    // let rotation = graphic.get("rotation");
-    let width = alignTo(graphic.get("width"), TILE_SIZE);
-    let height = alignTo(graphic.get("height"), TILE_SIZE);
+getBoundingBoxForGraphic = function (graphic) {
+    return getBoundingBox(graphic.get("left"), graphic.get("top"), graphic.get("width"), graphic.get("height"), graphic.get("rotation"));
+}
+
+getBoundingBox = function (graphicLeft, graphicTop, graphicWidth, graphicHeight, graphicRotation) {
+
+    let width = alignTo(graphicWidth, TILE_SIZE);
+    let height = alignTo(graphicHeight, TILE_SIZE);
+
+    if ((graphicRotation == 90) || (graphicRotation == 270)) {
+        let swap = width;
+        width = height;
+        height = swap;
+    }
 
     // `left` and `top` represent the distance from the top-left corner to the object's center
-    let left = alignTo(graphic.get("left") - width / 2, TILE_SIZE);
-    let top = alignTo(graphic.get("top") - height / 2, TILE_SIZE);
+    let left = alignTo(graphicLeft - width / 2, TILE_SIZE);
+    let top = alignTo(graphicTop - height / 2, TILE_SIZE);
 
     return new BoundingBox(left, top, width, height);
 }
@@ -145,7 +155,7 @@ contains = function (container, containee) {
     );
 }
 
-getWallsOverlappingWithBoundingBox = function (boundingBox, pageId) {
+getWallsOverlappingWithBoundingBox = function (boundingBox, pageId, excludedId) {
     let mapTokens = findObjs({
         _pageid: pageId,
         _type: "graphic",
@@ -155,9 +165,12 @@ getWallsOverlappingWithBoundingBox = function (boundingBox, pageId) {
 
     let validWalls = [];
     _.each(mapTokens, function (token) {
+        if (excludedId == token.id) {
+            return;
+        }
         let wallTypeAttribute = getWallTypeAttribute(token);
         if (isValidWall(wallTypeAttribute)) {
-            let wallBoundingBox = getBoundingBox(token);
+            let wallBoundingBox = getBoundingBoxForGraphic(token);
             // log(`Checking wall bounding box: ${wallBoundingBox}`);
             if (areOverlapping(boundingBox, wallBoundingBox)) {
                 validWalls.push(new WallInfo(token, wallBoundingBox, getTileTypeFromWallTypeAttribute(wallTypeAttribute)));
@@ -165,9 +178,6 @@ getWallsOverlappingWithBoundingBox = function (boundingBox, pageId) {
         }
     });
     return validWalls;
-    // return mapTokens.filter(token =>
-    //     isValidWall(getWallTypeAttribute(token)) && areOverlapping(boundingBox, getBoundingBox(token))
-    // );
 }
 
 pathToString = function (path) {
@@ -464,7 +474,7 @@ getPathsSet = function (paths) {
     return pathsSet;
 }
 
-insertNewWall = function (regionalMap, tileType) {
+insertCurrentWall = function (regionalMap, tileType) {
     let innerRegionLastRowIndex = regionalMap.length - 1 - EXPANSION;
     let innerRegionLastColumnIndex = regionalMap[0].length - 1 - EXPANSION;
 
@@ -495,6 +505,48 @@ getPathsToRemove = function (newPathsSet, oldPaths) {
     return pathsToRemove;
 }
 
+handlePaths = function (oldPaths, newPaths) {
+    let oldPathsSet = getPathsSet(oldPaths);
+    let newPathsSet = getPathsSet(newPaths);
+    let pathsToAdd = getPathsToAdd(oldPathsSet, newPaths);
+    let pathsToRemove = getPathsToRemove(newPathsSet, oldPaths)
+    addPaths(pathsToAdd);
+    removePaths(pathsToRemove);
+}
+
+areEqualBoundingBoxes = function (boundingBox1, boundingBox2) {
+    return (
+        boundingBox1.left == boundingBox2.left &&
+        boundingBox1.top == boundingBox2.top &&
+        boundingBox1.width == boundingBox2.width &&
+        boundingBox1.height == boundingBox2.height
+    );
+}
+
+handleInsertion = function (graphic, boundingBox, pageId) {
+    let expandedBoundingBox = expandBoundingBox(boundingBox, TILE_SIZE * EXPANSION);
+    let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId, graphic.id);
+    let regionalMap = getRegionalMap(expandedBoundingBox, overlappingWalls);
+    // log(`regionalMap: ${prettifyMatrix(regionalMap)}`)
+    let tileType = getTileTypeFromWallTypeAttribute(wallTypeAttribute);
+    let oldPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
+    insertCurrentWall(regionalMap, tileType);
+    // log(`regionalMap after insertion: ${prettifyMatrix(regionalMap)}`)
+    let newPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
+    handlePaths(oldPaths, newPaths);
+}
+
+handleDetetion = function (graphic, boundingBox, pageId) {
+    let expandedBoundingBox = expandBoundingBox(boundingBox, TILE_SIZE * EXPANSION);
+    let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId, graphic.id);
+    let regionalMap = getRegionalMap(expandedBoundingBox, overlappingWalls);
+    let tileType = getTileTypeFromWallTypeAttribute(wallTypeAttribute);
+    let newPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
+    insertCurrentWall(regionalMap, tileType);
+    let oldPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
+    handlePaths(oldPaths, newPaths);
+}
+
 insertionCheck = function (graphic) {
     if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
         return;
@@ -504,29 +556,60 @@ insertionCheck = function (graphic) {
     if (!isValidWall(wallTypeAttribute)) {
         return;
     }
-    let boundingBox = getBoundingBox(graphic);
-    let expandedBoundingBox = expandBoundingBox(boundingBox, TILE_SIZE * EXPANSION);
+    let boundingBox = getBoundingBoxForGraphic(graphic);
     let pageId = graphic.get("_pageid");
-    let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId);
-    let regionalMap = getRegionalMap(expandedBoundingBox, overlappingWalls);
-    log(`regionalMap: ${prettifyMatrix(regionalMap)}`)
-    let tileType = getTileTypeFromWallTypeAttribute(wallTypeAttribute);
-    
-    let oldPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
-    let oldPathsSet = getPathsSet(oldPaths);
-    insertNewWall(regionalMap, tileType);
-    log(`regionalMap after insertion: ${prettifyMatrix(regionalMap)}`)
-    let newPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
-    let newPathsSet = getPathsSet(newPaths);
-
-    let pathsToAdd = getPathsToAdd(oldPathsSet, newPaths);
-    let pathsToRemove = getPathsToRemove(newPathsSet, oldPaths)
-    addPaths(pathsToAdd);
-    removePaths(pathsToRemove);
+    handleInsertion(graphic, boundingBox, pageId);
     return;
+}
+
+deletionCheck = function (graphic) {
+    if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
+        return;
+    }
+
+    wallTypeAttribute = getWallTypeAttribute(graphic);
+    if (!isValidWall(wallTypeAttribute)) {
+        return;
+    }
+    let boundingBox = getBoundingBoxForGraphic(graphic);
+    let pageId = graphic.get("_pageid");
+    handleDetetion(graphic, boundingBox, pageId);
+    return;
+}
+
+movementCheck = function (graphic, previous) {
+    if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
+        return;
+    }
+
+    wallTypeAttribute = getWallTypeAttribute(graphic);
+    if (!isValidWall(wallTypeAttribute)) {
+        return;
+    }
+
+    let oldBoundingBox = getBoundingBox(
+        previous["left"],
+        previous["top"],
+        previous["width"],
+        previous["height"],
+        previous["rotation"]);
+    let newBoundingBox = getBoundingBoxForGraphic(graphic);
+    if (areEqualBoundingBoxes(oldBoundingBox, newBoundingBox)) {
+        return;
+    }
+
+    let pageId = graphic.get("_pageid");
+
+    // remove the wall from the old location
+    handleDetetion(graphic, oldBoundingBox, pageId);
+
+    // add the wall to the new location
+    handleInsertion(graphic, newBoundingBox, pageId);
 }
 
 on("ready", function () {
     on("add:token", insertionCheck);
+    on('destroy:token', deletionCheck);
+    on("change:token", movementCheck);
 });
-// on("change:token", movementCheck);
+
