@@ -23,7 +23,7 @@ const WALL_TYPE_TO_TILE_TYPE = {
 
 getTileTypeFromWallTypeAttribute = function (wallTypeAttribute) {
     return WALL_TYPE_TO_TILE_TYPE[wallTypeAttribute] || TileType.OFF;
-}
+};
 
 class BoundingBox {
     constructor(left, top, width, height) {
@@ -63,12 +63,16 @@ class PathsSet {
         this.set = new Set();
     }
 
+    hash(path) {
+        return JSON.stringify(path, Object.keys(path).sort());
+    }
+
     add(path) {
-        this.set.add(JSON.stringify(path, Object.keys(path).sort()));
+        this.set.add(this.hash(path));
     }
 
     contains(path) {
-        return this.set.has(JSON.stringify(path, Object.keys(path).sort()));
+        return this.set.has(this.hash(path));
     }
 }
 
@@ -77,7 +81,7 @@ getChatacterAttributes = function (characterId) {
         _type: "attribute",
         _characterid: characterId,
     });
-}
+};
 
 getWallAttribute = function (characterAttributes) {
     let attribute = _.find(characterAttributes, function (attribute) {
@@ -86,22 +90,27 @@ getWallAttribute = function (characterAttributes) {
     if (attribute !== undefined) {
         return attribute.get("current");
     }
-}
+};
 
 alignTo = function (value, alignment) {
     return Math.round(value / alignment) * alignment;
-}
+};
 
 getBoundingBoxForGraphic = function (graphic) {
-    return getBoundingBox(graphic.get("left"), graphic.get("top"), graphic.get("width"), graphic.get("height"), graphic.get("rotation"));
-}
+    return getBoundingBox(
+        graphic.get("left"),
+        graphic.get("top"),
+        graphic.get("width"),
+        graphic.get("height"),
+        graphic.get("rotation"),
+    );
+};
 
 getBoundingBox = function (graphicLeft, graphicTop, graphicWidth, graphicHeight, graphicRotation) {
-
     let width = alignTo(graphicWidth, TILE_SIZE);
     let height = alignTo(graphicHeight, TILE_SIZE);
 
-    if ((graphicRotation == 90) || (graphicRotation == 270)) {
+    if (graphicRotation == 90 || graphicRotation == 270) {
         let swap = width;
         width = height;
         height = swap;
@@ -112,7 +121,7 @@ getBoundingBox = function (graphicLeft, graphicTop, graphicWidth, graphicHeight,
     let top = alignTo(graphicTop - height / 2, TILE_SIZE);
 
     return new BoundingBox(left, top, width, height);
-}
+};
 
 expandBoundingBox = function (boundingBox, expansion) {
     return new BoundingBox(
@@ -121,11 +130,11 @@ expandBoundingBox = function (boundingBox, expansion) {
         boundingBox.width + 2 * expansion,
         boundingBox.height + 2 * expansion,
     );
-}
+};
 
 isValidWall = function (wallTypeAttribute) {
     return wallTypeAttribute === WallTypeAttribute.STATIC || wallTypeAttribute == WallTypeAttribute.DYNAMIC;
-}
+};
 
 getWallTypeAttribute = function (graphic) {
     let characterId = graphic.get("represents");
@@ -135,7 +144,7 @@ getWallTypeAttribute = function (graphic) {
 
     let characterAttributes = getChatacterAttributes(characterId);
     return getWallAttribute(characterAttributes);
-}
+};
 
 areOverlapping = function (boundingBox1, boundingBox2) {
     return (
@@ -144,7 +153,7 @@ areOverlapping = function (boundingBox1, boundingBox2) {
         boundingBox1.top < boundingBox2.bottom &&
         boundingBox2.top < boundingBox1.bottom
     );
-}
+};
 
 contains = function (container, containee) {
     return (
@@ -153,7 +162,7 @@ contains = function (container, containee) {
         container.top <= containee.top &&
         container.bottom >= containee.bottom
     );
-}
+};
 
 getWallsOverlappingWithBoundingBox = function (boundingBox, pageId, excludedId) {
     let mapTokens = findObjs({
@@ -173,23 +182,30 @@ getWallsOverlappingWithBoundingBox = function (boundingBox, pageId, excludedId) 
             let wallBoundingBox = getBoundingBoxForGraphic(token);
             // log(`Checking wall bounding box: ${wallBoundingBox}`);
             if (areOverlapping(boundingBox, wallBoundingBox)) {
-                validWalls.push(new WallInfo(token, wallBoundingBox, getTileTypeFromWallTypeAttribute(wallTypeAttribute)));
+                validWalls.push(
+                    new WallInfo(token, wallBoundingBox, getTileTypeFromWallTypeAttribute(wallTypeAttribute)),
+                );
             }
         }
     });
     return validWalls;
-}
+};
 
 pathToString = function (path) {
-    return `Path(left=${path.get("left")}, top=${path.get("top")}, width=${path.get("width")}, height=${path.get("height")}, stroke=${path.get("stroke")})`;
-}
+    let fields = ["left", "top", "width", "height", "stroke"];
+    return `Path(${_.map(fields, function (field) {
+        return `${field}=${obj.get(field)}`;
+    }).join(", ")})`;
+};
 
 prettifyMatrix = function (matrix) {
-    let matrixStr = matrix.map(function (row) {
-        return `[${row.join(", ")}]`;
-    }).join(",\n");
+    let matrixStr = matrix
+        .map(function (row) {
+            return `[${row.join(", ")}]`;
+        })
+        .join(",\n");
     return `[\n${matrixStr}\n]`;
-}
+};
 
 getRegionalMap = function (boundingBox, walls) {
     // Consider using only the outer frame
@@ -211,15 +227,15 @@ getRegionalMap = function (boundingBox, walls) {
         let wallType = wall.wallType;
 
         let firstRowIndex = Math.max(0, Math.round((wallBoundingBox.top - boundingBox.top) / TILE_SIZE));
-        let rowCount = Math.round((
-            Math.min(wallBoundingBox.bottom, boundingBox.bottom) -
-            Math.max(wallBoundingBox.top, boundingBox.top)
-        ) / TILE_SIZE);
+        let rowCount = Math.round(
+            (Math.min(wallBoundingBox.bottom, boundingBox.bottom) - Math.max(wallBoundingBox.top, boundingBox.top)) /
+                TILE_SIZE,
+        );
         let firstColumnIndex = Math.max(0, Math.round((wallBoundingBox.left - boundingBox.left) / TILE_SIZE));
-        let columnCount = Math.round((
-            Math.min(wallBoundingBox.right, boundingBox.right) -
-            Math.max(wallBoundingBox.left, boundingBox.left)
-        ) / TILE_SIZE);
+        let columnCount = Math.round(
+            (Math.min(wallBoundingBox.right, boundingBox.right) - Math.max(wallBoundingBox.left, boundingBox.left)) /
+                TILE_SIZE,
+        );
 
         // log(`firstRowIndex: ${firstRowIndex}`);
         // log(`rowCount: ${rowCount}`);
@@ -232,23 +248,22 @@ getRegionalMap = function (boundingBox, walls) {
     });
     // log(`Regional Map: ${prettifyMatrix(tiles)}`);
     return tiles;
-}
+};
 
 isNormalPath = function (selfTileType, otherTileType) {
     return selfTileType !== TileType.OFF && otherTileType !== TileType.OFF;
-}
+};
 
 isDiagonalPath = function (selfTileType, otherTileType1, otherTileType2) {
     return (
-        selfTileType !== TileType.OFF &&
-        otherTileType1 !== TileType.STATIC &&
-        otherTileType2 !== TileType.STATIC
+        (selfTileType == TileType.STATIC && otherTileType1 !== TileType.STATIC && otherTileType2 !== TileType.STATIC) ||
+        (selfTileType == TileType.DYNAMIC && otherTileType1 !== TileType.OFF && otherTileType2 !== TileType.OFF)
     );
-}
+};
 
 /**
  * Adds a path.
- * 
+ *
  * @param pageId    ID of the page to add the path to.
  * @param left      X-coordinate for the leftmost point of the path.
  * @param top       Y-coordinate for the topmost point of the path.
@@ -256,9 +271,9 @@ isDiagonalPath = function (selfTileType, otherTileType1, otherTileType2) {
 addPath = function (parameters) {
     let oldPaths = findObjs(parameters);
     if (oldPaths.length == 0) {
-        createObj("path", parameters)
+        createObj("path", parameters);
     }
-}
+};
 
 removePaths = function (paths) {
     _.each(paths, function (path) {
@@ -267,20 +282,23 @@ removePaths = function (paths) {
             pathObject.remove();
         });
     });
-}
+};
 
 addPaths = function (pathsParameters) {
     _.each(pathsParameters, function (pathParameters) {
         addPath(pathParameters);
     });
-}
+};
 
 getPathParameters = function (pageId, x1, y1, x2, y2, left, top, width, height) {
     return {
         _pageid: pageId,
         _type: "path",
         layer: "walls",
-        path: JSON.stringify([['M', x1, y1], ['L', x2, y2]]),
+        path: JSON.stringify([
+            ["M", x1, y1],
+            ["L", x2, y2],
+        ]),
         fill: "transparent",
         stroke: PATHS_COLOR,
         width: width,
@@ -289,11 +307,11 @@ getPathParameters = function (pageId, x1, y1, x2, y2, left, top, width, height) 
         top: top + height / 2,
         rotation: 0,
     };
-}
+};
 
 /**
- * Adds a vertical path.
- * 
+ * Returns a vertical path.
+ *
  * @param pageId    ID of the page to add the path to.
  * @param left      X-coordinate of the path.
  * @param top       Y-coordinate for the topmost point of the path.
@@ -301,11 +319,11 @@ getPathParameters = function (pageId, x1, y1, x2, y2, left, top, width, height) 
  */
 getVerticalPath = function (pageId, left, top, length) {
     return getPathParameters(pageId, 0, 0, 0, length, left, top, 0, length);
-}
+};
 
 /**
- * Adds a horizontal path.
- * 
+ * Returns a horizontal path.
+ *
  * @param pageId    ID of the page to add the path to.
  * @param left      X-coordinate for the leftmost point of the path.
  * @param top       Y-coordinate of the path.
@@ -313,11 +331,11 @@ getVerticalPath = function (pageId, left, top, length) {
  */
 getHorizontalPath = function (pageId, left, top, length) {
     return getPathParameters(pageId, 0, 0, length, 0, left, top, length, 0);
-}
+};
 
 /**
- * Adds a diagonal path from bottom-left to top-right.
- * 
+ * Returns a diagonal path from bottom-left to top-right.
+ *
  * @param pageId    ID of the page to add the path to.
  * @param left      X-coordinate for the leftmost point of the path.
  * @param top       Y-coordinate for the topmost point of the path.
@@ -325,11 +343,11 @@ getHorizontalPath = function (pageId, left, top, length) {
  */
 getSlashPath = function (pageId, left, top, length) {
     return getPathParameters(pageId, 0, length, length, 0, left, top, length, length);
-}
+};
 
 /**
- * Adds a diagonal path from top-left to bottom-right.
- * 
+ * Returns a diagonal path from top-left to bottom-right.
+ *
  * @param pageId    ID of the page to add the path to.
  * @param left      X-coordinate for the leftmost point of the path.
  * @param top       Y-coordinate for the topmost point of the path.
@@ -337,8 +355,7 @@ getSlashPath = function (pageId, left, top, length) {
  */
 getBackSlashPath = function (pageId, left, top, length) {
     return getPathParameters(pageId, 0, 0, length, length, left, top, length, length);
-}
-
+};
 
 getRequiredDiagonalPaths = function (regionalMap, boundingBox, pageId) {
     let pathsParameters = [];
@@ -349,37 +366,43 @@ getRequiredDiagonalPaths = function (regionalMap, boundingBox, pageId) {
             let tileCenterX = boundingBox.left + j * TILE_SIZE + TILE_SIZE / 2;
             let tileCenterY = boundingBox.top + i * TILE_SIZE + TILE_SIZE / 2;
             // Handle top-left backslash path
-            if ((i > 0) &&
-                (j > 0) &&
-                (isDiagonalPath(regionalMap[i][j], regionalMap[i - 1][j], regionalMap[i][j - 1]))) {
-                pathsParameters.push(getBackSlashPath(pageId, tileCenterX - TILE_SIZE / 2, tileCenterY - TILE_SIZE / 2, TILE_SIZE / 2));
+            if (i > 0 && j > 0 && isDiagonalPath(regionalMap[i][j], regionalMap[i - 1][j], regionalMap[i][j - 1])) {
+                pathsParameters.push(
+                    getBackSlashPath(pageId, tileCenterX - TILE_SIZE / 2, tileCenterY - TILE_SIZE / 2, TILE_SIZE / 2),
+                );
             }
 
             // Handle top-right slash path
-            if ((i > 0) &&
-                (j < lastColumnIndex) &&
-                (isDiagonalPath(regionalMap[i][j], regionalMap[i - 1][j], regionalMap[i][j + 1]))) {
+            if (
+                i > 0 &&
+                j < lastColumnIndex &&
+                isDiagonalPath(regionalMap[i][j], regionalMap[i - 1][j], regionalMap[i][j + 1])
+            ) {
                 pathsParameters.push(getSlashPath(pageId, tileCenterX, tileCenterY - TILE_SIZE / 2, TILE_SIZE / 2));
             }
 
             // Handle bottom-left slash path
-            if ((i < lastRowIndex) &&
-                (j > 0) &&
-                (isDiagonalPath(regionalMap[i][j], regionalMap[i + 1][j], regionalMap[i][j - 1]))) {
+            if (
+                i < lastRowIndex &&
+                j > 0 &&
+                isDiagonalPath(regionalMap[i][j], regionalMap[i + 1][j], regionalMap[i][j - 1])
+            ) {
                 pathsParameters.push(getSlashPath(pageId, tileCenterX - TILE_SIZE / 2, tileCenterY, TILE_SIZE / 2));
             }
 
             // Handle bottom-right backslash path
-            if ((i < lastRowIndex) &&
-                (j < lastColumnIndex) &&
-                (isDiagonalPath(regionalMap[i][j], regionalMap[i + 1][j], regionalMap[i][j + 1]))) {
+            if (
+                i < lastRowIndex &&
+                j < lastColumnIndex &&
+                isDiagonalPath(regionalMap[i][j], regionalMap[i + 1][j], regionalMap[i][j + 1])
+            ) {
                 pathsParameters.push(getBackSlashPath(pageId, tileCenterX, tileCenterY, TILE_SIZE / 2));
             }
         }
     }
 
     return pathsParameters;
-}
+};
 
 getRequiredHorizontalPaths = function (regionalMap, boundingBox, pageId) {
     let pathsParameters = [];
@@ -388,7 +411,8 @@ getRequiredHorizontalPaths = function (regionalMap, boundingBox, pageId) {
 
     for (let j = 0; j < lastColumnIndex; j++) {
         let latestHorizontalPath = undefined;
-        let isLatestWalltHorizontalPath = (regionalMap[0][j] !== TileType.OFF);
+        // TODO: Support dynamic cases PROPERLY
+        let hasNormalPathAbove = regionalMap[0][j] !== TileType.OFF;
         for (let i = 0; i <= lastRowIndex; i++) {
             let tileCenterX = boundingBox.left + j * TILE_SIZE + TILE_SIZE / 2;
             let tileCenterY = boundingBox.top + i * TILE_SIZE + TILE_SIZE / 2;
@@ -396,26 +420,26 @@ getRequiredHorizontalPaths = function (regionalMap, boundingBox, pageId) {
                 let horizontalPath = getHorizontalPath(pageId, tileCenterX, tileCenterY, TILE_SIZE);
 
                 // We have a potential line, Check if we need to collect it
-                if (isLatestWalltHorizontalPath) {
-                    // the horizontal line above us exists, just update the latest
+                if (hasNormalPathAbove) {
+                    // The horizontal line above us exists, just update the latest
                     latestHorizontalPath = horizontalPath;
                 } else {
                     // We've reached a flip from no path to a path, collect the path
                     pathsParameters.push(horizontalPath);
                 }
-                isLatestWalltHorizontalPath = true;
+                hasNormalPathAbove = true;
             } else {
-                if (isLatestWalltHorizontalPath && (latestHorizontalPath !== undefined)) {
+                if (hasNormalPathAbove && latestHorizontalPath !== undefined) {
                     // We've reached a flip from a path to no path, collect the latest path
                     pathsParameters.push(latestHorizontalPath);
                 }
-                isLatestWalltHorizontalPath = false;
+                hasNormalPathAbove = false;
             }
         }
     }
 
     return pathsParameters;
-}
+};
 
 getRequiredVerticalPaths = function (regionalMap, boundingBox, pageId) {
     let pathsParameters = [];
@@ -424,7 +448,7 @@ getRequiredVerticalPaths = function (regionalMap, boundingBox, pageId) {
 
     for (let i = 0; i < lastRowIndex; i++) {
         let latestVerticalPath = undefined;
-        let isLatestWallVerticalPath = (regionalMap[i][0] !== TileType.OFF);
+        let hasNormalPathToLeft = regionalMap[i][0] !== TileType.OFF;
         for (let j = 0; j <= lastColumnIndex; j++) {
             let tileCenterX = boundingBox.left + j * TILE_SIZE + TILE_SIZE / 2;
             let tileCenterY = boundingBox.top + i * TILE_SIZE + TILE_SIZE / 2;
@@ -432,26 +456,26 @@ getRequiredVerticalPaths = function (regionalMap, boundingBox, pageId) {
                 let verticalPath = getVerticalPath(pageId, tileCenterX, tileCenterY, TILE_SIZE);
 
                 // We have a potential line, Check if we need to collect it
-                if (isLatestWallVerticalPath) {
+                if (hasNormalPathToLeft) {
                     // the vertical line to our left exists, just update the latest
                     latestVerticalPath = verticalPath;
                 } else {
                     // We've reached a flip from no path to a path, collect the path
                     pathsParameters.push(verticalPath);
                 }
-                isLatestWallVerticalPath = true;
+                hasNormalPathToLeft = true;
             } else {
-                if (isLatestWallVerticalPath && (latestVerticalPath !== undefined)) {
+                if (hasNormalPathToLeft && latestVerticalPath !== undefined) {
                     // We've reached a flip from a path to no path, collect the latest path
                     pathsParameters.push(latestVerticalPath);
                 }
-                isLatestWallVerticalPath = false;
+                hasNormalPathToLeft = false;
             }
         }
     }
 
     return pathsParameters;
-}
+};
 
 getRequiredPaths = function (regionalMap, boundingBox, pageId) {
     let pathsParameters = [];
@@ -466,13 +490,15 @@ getRequiredPaths = function (regionalMap, boundingBox, pageId) {
     pathsParameters.push(...getRequiredVerticalPaths(regionalMap, boundingBox, pageId));
 
     return pathsParameters;
-}
+};
 
 getPathsSet = function (paths) {
     let pathsSet = new PathsSet();
-    _.each(paths, function (path) { pathsSet.add(path) });
+    _.each(paths, function (path) {
+        pathsSet.add(path);
+    });
     return pathsSet;
-}
+};
 
 insertCurrentWall = function (regionalMap, tileType) {
     let innerRegionLastRowIndex = regionalMap.length - 1 - EXPANSION;
@@ -483,36 +509,26 @@ insertCurrentWall = function (regionalMap, tileType) {
             regionalMap[i][j] = tileType;
         }
     }
-}
+};
 
-getPathsToAdd = function (oldPathsSet, newPaths) {
-    let pathsToAdd = [];
-    _.each(newPaths, function (path) {
-        if (!oldPathsSet.contains(path)) {
-            pathsToAdd.push(path);
+subtract = function (paths, pathsSet) {
+    let result = [];
+    _.each(paths, function (path) {
+        if (!pathsSet.contains(path)) {
+            result.push(path);
         }
     });
-    return pathsToAdd;
-}
-
-getPathsToRemove = function (newPathsSet, oldPaths) {
-    let pathsToRemove = [];
-    _.each(oldPaths, function (path) {
-        if (!newPathsSet.contains(path)) {
-            pathsToRemove.push(path);
-        }
-    });
-    return pathsToRemove;
-}
+    return result;
+};
 
 handlePaths = function (oldPaths, newPaths) {
     let oldPathsSet = getPathsSet(oldPaths);
     let newPathsSet = getPathsSet(newPaths);
-    let pathsToAdd = getPathsToAdd(oldPathsSet, newPaths);
-    let pathsToRemove = getPathsToRemove(newPathsSet, oldPaths)
+    let pathsToAdd = subtract(newPaths, oldPathsSet);
+    let pathsToRemove = subtract(oldPaths, newPathsSet);
     addPaths(pathsToAdd);
     removePaths(pathsToRemove);
-}
+};
 
 areEqualBoundingBoxes = function (boundingBox1, boundingBox2) {
     return (
@@ -521,31 +537,28 @@ areEqualBoundingBoxes = function (boundingBox1, boundingBox2) {
         boundingBox1.width == boundingBox2.width &&
         boundingBox1.height == boundingBox2.height
     );
-}
+};
 
 handleInsertion = function (graphic, boundingBox, pageId) {
-    let expandedBoundingBox = expandBoundingBox(boundingBox, TILE_SIZE * EXPANSION);
-    let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId, graphic.id);
-    let regionalMap = getRegionalMap(expandedBoundingBox, overlappingWalls);
-    // log(`regionalMap: ${prettifyMatrix(regionalMap)}`)
-    let tileType = getTileTypeFromWallTypeAttribute(wallTypeAttribute);
-    let oldPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
-    insertCurrentWall(regionalMap, tileType);
-    // log(`regionalMap after insertion: ${prettifyMatrix(regionalMap)}`)
-    let newPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
+    let [oldPaths, newPaths] = getPathsLists(graphic, boundingBox, pageId);
     handlePaths(oldPaths, newPaths);
-}
+};
 
-handleDetetion = function (graphic, boundingBox, pageId) {
+handleDeletion = function (graphic, boundingBox, pageId) {
+    let [newPaths, oldPaths] = getPathsLists(graphic, boundingBox, pageId);
+    handlePaths(oldPaths, newPaths);
+};
+
+getPathsLists = function (graphic, boundingBox, pageId) {
     let expandedBoundingBox = expandBoundingBox(boundingBox, TILE_SIZE * EXPANSION);
     let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId, graphic.id);
     let regionalMap = getRegionalMap(expandedBoundingBox, overlappingWalls);
     let tileType = getTileTypeFromWallTypeAttribute(wallTypeAttribute);
-    let newPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
+    let pathsWithoutGraphic = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
     insertCurrentWall(regionalMap, tileType);
-    let oldPaths = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
-    handlePaths(oldPaths, newPaths);
-}
+    let pathsWithGraphic = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
+    return [pathsWithoutGraphic, pathsWithGraphic];
+};
 
 insertionCheck = function (graphic) {
     if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
@@ -560,7 +573,7 @@ insertionCheck = function (graphic) {
     let pageId = graphic.get("_pageid");
     handleInsertion(graphic, boundingBox, pageId);
     return;
-}
+};
 
 deletionCheck = function (graphic) {
     if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
@@ -573,9 +586,9 @@ deletionCheck = function (graphic) {
     }
     let boundingBox = getBoundingBoxForGraphic(graphic);
     let pageId = graphic.get("_pageid");
-    handleDetetion(graphic, boundingBox, pageId);
+    handleDeletion(graphic, boundingBox, pageId);
     return;
-}
+};
 
 movementCheck = function (graphic, previous) {
     if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
@@ -592,7 +605,8 @@ movementCheck = function (graphic, previous) {
         previous["top"],
         previous["width"],
         previous["height"],
-        previous["rotation"]);
+        previous["rotation"],
+    );
     let newBoundingBox = getBoundingBoxForGraphic(graphic);
     if (areEqualBoundingBoxes(oldBoundingBox, newBoundingBox)) {
         return;
@@ -601,15 +615,14 @@ movementCheck = function (graphic, previous) {
     let pageId = graphic.get("_pageid");
 
     // remove the wall from the old location
-    handleDetetion(graphic, oldBoundingBox, pageId);
+    handleDeletion(graphic, oldBoundingBox, pageId);
 
     // add the wall to the new location
     handleInsertion(graphic, newBoundingBox, pageId);
-}
+};
 
 on("ready", function () {
     on("add:token", insertionCheck);
-    on('destroy:token', deletionCheck);
+    on("destroy:token", deletionCheck);
     on("change:token", movementCheck);
 });
-
