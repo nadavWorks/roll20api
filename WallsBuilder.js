@@ -146,6 +146,11 @@ getWallTypeAttribute = function (graphic) {
     return getWallAttribute(characterAttributes);
 };
 
+getWallTypeAttributeByCharacterId = function (characterId) {
+    let characterAttributes = getChatacterAttributes(characterId);
+    return getWallAttribute(characterAttributes);
+};
+
 areOverlapping = function (boundingBox1, boundingBox2) {
     return (
         boundingBox1.left < boundingBox2.right &&
@@ -607,29 +612,44 @@ deletionCheck = function (graphic) {
     return;
 };
 
-movementCheck = function (graphic, previous) {
-    if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
-        return;
-    }
-
-    wallTypeAttribute = getWallTypeAttribute(graphic);
-    if (!isValidWall(wallTypeAttribute)) {
-        return;
-    }
-
-    let oldBoundingBox = getBoundingBox(
+getOldBoundingBox = function (previous) {
+    return getBoundingBox(
         previous["left"],
         previous["top"],
         previous["width"],
         previous["height"],
         previous["rotation"],
     );
-    let newBoundingBox = getBoundingBoxForGraphic(graphic);
-    if (areEqualBoundingBoxes(oldBoundingBox, newBoundingBox) && previous["represents"] == graphic.get("represents")) {
+};
+
+movementCheck = function (graphic, previous) {
+    if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
+        return;
+    }
+    let pageId = graphic.get("_pageid");
+
+    wallTypeAttribute = getWallTypeAttribute(graphic);
+    if (!isValidWall(wallTypeAttribute)) {
+        if (
+            previous["represents"] !== graphic.get("represents") &&
+            previous["represents"] !== "" &&
+            isValidWall(getWallTypeAttributeByCharacterId(previous["represents"]))
+        ) {
+            // The graphic was changed to no longer represent a valid wall, remove wall traces
+            let oldBoundingBox = getOldBoundingBox(previous);
+            handleDeletion(graphic, oldBoundingBox, pageId);
+        }
         return;
     }
 
-    let pageId = graphic.get("_pageid");
+    let oldBoundingBox = getOldBoundingBox(previous);
+    let newBoundingBox = getBoundingBoxForGraphic(graphic);
+    if (areEqualBoundingBoxes(oldBoundingBox, newBoundingBox)) {
+        if (previous["represents"] !== graphic.get("represents")) {
+            handleInsertion(graphic, newBoundingBox, pageId);
+        }
+        return;
+    }
 
     // remove the wall from the old location
     handleDeletion(graphic, oldBoundingBox, pageId);
