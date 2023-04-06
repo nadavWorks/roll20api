@@ -257,7 +257,7 @@ isNormalPath = function (selfTileType, otherTileType) {
 isDiagonalPath = function (selfTileType, otherTileType1, otherTileType2) {
     return (
         (selfTileType == TileType.STATIC && otherTileType1 !== TileType.STATIC && otherTileType2 !== TileType.STATIC) ||
-        (selfTileType == TileType.DYNAMIC && otherTileType1 !== TileType.OFF && otherTileType2 !== TileType.OFF)
+        (selfTileType == TileType.DYNAMIC && otherTileType1 == TileType.OFF && otherTileType2 == TileType.OFF)
     );
 };
 
@@ -411,30 +411,37 @@ getRequiredHorizontalPaths = function (regionalMap, boundingBox, pageId) {
 
     for (let j = 0; j < lastColumnIndex; j++) {
         let latestHorizontalPath = undefined;
-        // TODO: Support dynamic cases PROPERLY
-        let hasNormalPathAbove = regionalMap[0][j] !== TileType.OFF;
+        let tileTypeAboveLeft = regionalMap[0][j];
+        let tileTypeAboveRight = regionalMap[0][j + 1];
+        let hasPathAbove = isNormalPath(tileTypeAboveLeft, tileTypeAboveRight);
         for (let i = 0; i <= lastRowIndex; i++) {
             let tileCenterX = boundingBox.left + j * TILE_SIZE + TILE_SIZE / 2;
             let tileCenterY = boundingBox.top + i * TILE_SIZE + TILE_SIZE / 2;
             if (isNormalPath(regionalMap[i][j], regionalMap[i][j + 1])) {
+                // We have a potential line, Check if we need to collect it
                 let horizontalPath = getHorizontalPath(pageId, tileCenterX, tileCenterY, TILE_SIZE);
 
-                // We have a potential line, Check if we need to collect it
-                if (hasNormalPathAbove) {
-                    // The horizontal line above us exists, just update the latest
+                if (regionalMap[i][j] == tileTypeAboveLeft && regionalMap[i][j + 1] == tileTypeAboveRight) {
+                    // We continue in the same type combination as above us, just update the latest
                     latestHorizontalPath = horizontalPath;
                 } else {
-                    // We've reached a flip from no path to a path, collect the path
+                    // We broke continuation, collect the path
                     pathsParameters.push(horizontalPath);
+                    if (hasPathAbove && latestHorizontalPath !== undefined) {
+                        // There was supposed to be a wall above us, collect the latest
+                        pathsParameters.push(latestHorizontalPath);
+                    }
                 }
-                hasNormalPathAbove = true;
+                hasPathAbove = true;
             } else {
-                if (hasNormalPathAbove && latestHorizontalPath !== undefined) {
+                if (hasPathAbove && latestHorizontalPath !== undefined) {
                     // We've reached a flip from a path to no path, collect the latest path
                     pathsParameters.push(latestHorizontalPath);
                 }
-                hasNormalPathAbove = false;
+                hasPathAbove = false;
             }
+            tileTypeAboveLeft = regionalMap[i][j];
+            tileTypeAboveRight = regionalMap[i][j + 1];
         }
     }
 
@@ -448,29 +455,37 @@ getRequiredVerticalPaths = function (regionalMap, boundingBox, pageId) {
 
     for (let i = 0; i < lastRowIndex; i++) {
         let latestVerticalPath = undefined;
-        let hasNormalPathToLeft = regionalMap[i][0] !== TileType.OFF;
+        let tileTypeLeftTop = regionalMap[i][0];
+        let tileTypeLeftBottom = regionalMap[i + 1][0];
+        let hasPathLeft = isNormalPath(tileTypeLeftTop, tileTypeLeftBottom);
         for (let j = 0; j <= lastColumnIndex; j++) {
             let tileCenterX = boundingBox.left + j * TILE_SIZE + TILE_SIZE / 2;
             let tileCenterY = boundingBox.top + i * TILE_SIZE + TILE_SIZE / 2;
             if (isNormalPath(regionalMap[i][j], regionalMap[i + 1][j])) {
+                // We have a potential line, Check if we need to collect it
                 let verticalPath = getVerticalPath(pageId, tileCenterX, tileCenterY, TILE_SIZE);
 
-                // We have a potential line, Check if we need to collect it
-                if (hasNormalPathToLeft) {
-                    // the vertical line to our left exists, just update the latest
+                if (regionalMap[i][j] == tileTypeLeftTop && regionalMap[i + 1][j] == tileTypeLeftBottom) {
+                    // We continue in the same type combination as to our left, just update the latest
                     latestVerticalPath = verticalPath;
                 } else {
-                    // We've reached a flip from no path to a path, collect the path
+                    // We broke continuation, collect the path
                     pathsParameters.push(verticalPath);
+                    if (hasPathLeft && latestVerticalPath !== undefined) {
+                        // There was supposed to be a wall to our left, collect the latest
+                        pathsParameters.push(latestVerticalPath);
+                    }
                 }
-                hasNormalPathToLeft = true;
+                hasPathLeft = true;
             } else {
-                if (hasNormalPathToLeft && latestVerticalPath !== undefined) {
+                if (hasPathLeft && latestVerticalPath !== undefined) {
                     // We've reached a flip from a path to no path, collect the latest path
                     pathsParameters.push(latestVerticalPath);
                 }
-                hasNormalPathToLeft = false;
+                hasPathLeft = false;
             }
+            tileTypeLeftTop = regionalMap[i][j];
+            tileTypeLeftBottom = regionalMap[i + 1][j];
         }
     }
 
@@ -553,9 +568,11 @@ getPathsLists = function (graphic, boundingBox, pageId) {
     let expandedBoundingBox = expandBoundingBox(boundingBox, TILE_SIZE * EXPANSION);
     let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId, graphic.id);
     let regionalMap = getRegionalMap(expandedBoundingBox, overlappingWalls);
+    log(`regionalMap: ${prettifyMatrix(regionalMap)}`);
     let tileType = getTileTypeFromWallTypeAttribute(wallTypeAttribute);
     let pathsWithoutGraphic = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
     insertCurrentWall(regionalMap, tileType);
+    log(`regionalMap after insertion : ${prettifyMatrix(regionalMap)}`);
     let pathsWithGraphic = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
     return [pathsWithoutGraphic, pathsWithGraphic];
 };
