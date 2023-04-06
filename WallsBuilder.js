@@ -568,11 +568,11 @@ getPathsLists = function (graphic, boundingBox, pageId) {
     let expandedBoundingBox = expandBoundingBox(boundingBox, TILE_SIZE * EXPANSION);
     let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId, graphic.id);
     let regionalMap = getRegionalMap(expandedBoundingBox, overlappingWalls);
-    log(`regionalMap: ${prettifyMatrix(regionalMap)}`);
+    // log(`regionalMap: ${prettifyMatrix(regionalMap)}`);
     let tileType = getTileTypeFromWallTypeAttribute(wallTypeAttribute);
     let pathsWithoutGraphic = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
     insertCurrentWall(regionalMap, tileType);
-    log(`regionalMap after insertion : ${prettifyMatrix(regionalMap)}`);
+    // log(`regionalMap after insertion : ${prettifyMatrix(regionalMap)}`);
     let pathsWithGraphic = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
     return [pathsWithoutGraphic, pathsWithGraphic];
 };
@@ -625,7 +625,7 @@ movementCheck = function (graphic, previous) {
         previous["rotation"],
     );
     let newBoundingBox = getBoundingBoxForGraphic(graphic);
-    if (areEqualBoundingBoxes(oldBoundingBox, newBoundingBox)) {
+    if (areEqualBoundingBoxes(oldBoundingBox, newBoundingBox) && previous["represents"] == graphic.get("represents")) {
         return;
     }
 
