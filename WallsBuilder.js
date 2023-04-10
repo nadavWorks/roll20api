@@ -5,7 +5,8 @@ var TILE_SIZE = 70;
 var EXPANSION = 2;
 var STATIC_PATHS_COLOR = "#FF0000";
 var DYNAMIC_PATHS_COLOR = "#00FF00";
-var TRANSISION_PATHS_COLOR = "#FFFF00";
+var TRANSITION_PATHS_COLOR = "#FFFF00";
+var IS_DYNAMIC_APPLIED = false; // Should we set dynamic walls' paths in walls layer and transition paths in gmlayer, or vice versa.
 
 const WallTypeAttribute = {
     DYNAMIC: "dynamic",
@@ -298,10 +299,17 @@ addPaths = function (pathsParameters) {
 };
 
 getPathParameters = function (pageId, x1, y1, x2, y2, left, top, width, height, stroke) {
+    let layer = "walls";
+    if (
+        (stroke == DYNAMIC_PATHS_COLOR && !IS_DYNAMIC_APPLIED) ||
+        (stroke == TRANSITION_PATHS_COLOR && IS_DYNAMIC_APPLIED)
+    ) {
+        layer = "gmlayer";
+    }
     return {
         _pageid: pageId,
         _type: "path",
-        layer: "walls",
+        layer: layer,
         path: JSON.stringify([
             ["M", x1, y1],
             ["L", x2, y2],
@@ -382,7 +390,7 @@ getDiagonalColor = function (selfTileType, otherTileType1, otherTileType2) {
     if (selfTileType == TileType.DYNAMIC && otherTileType1 == otherTileType2 && otherTileType1 == TileType.OFF) {
         return DYNAMIC_PATHS_COLOR;
     }
-    return TRANSISION_PATHS_COLOR;
+    return TRANSITION_PATHS_COLOR;
 };
 
 getRequiredDiagonalPaths = function (regionalMap, boundingBox, pageId) {
