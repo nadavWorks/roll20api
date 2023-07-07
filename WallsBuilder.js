@@ -285,7 +285,7 @@ addPath = function (parameters) {
 
 removePaths = function (paths) {
     _.each(paths, function (path) {
-        pathObjects = findObjs(path);
+        let pathObjects = findObjs(path);
         _.each(pathObjects, function (pathObject) {
             pathObject.remove();
         });
@@ -662,17 +662,17 @@ areEqualBoundingBoxes = function (boundingBox1, boundingBox2) {
     );
 };
 
-handleInsertion = function (graphic, boundingBox, pageId) {
-    let [oldPaths, newPaths] = getPathsLists(graphic, boundingBox, pageId);
+handleInsertion = function (graphic, boundingBox, pageId, wallTypeAttribute) {
+    let [oldPaths, newPaths] = getPathsLists(graphic, boundingBox, pageId, wallTypeAttribute);
     handlePaths(oldPaths, newPaths);
 };
 
-handleDeletion = function (graphic, boundingBox, pageId) {
-    let [newPaths, oldPaths] = getPathsLists(graphic, boundingBox, pageId);
+handleDeletion = function (graphic, boundingBox, pageId, wallTypeAttribute) {
+    let [newPaths, oldPaths] = getPathsLists(graphic, boundingBox, pageId, wallTypeAttribute);
     handlePaths(oldPaths, newPaths);
 };
 
-getPathsLists = function (graphic, boundingBox, pageId) {
+getPathsLists = function (graphic, boundingBox, pageId, wallTypeAttribute) {
     let expandedBoundingBox = expandBoundingBox(boundingBox, TILE_SIZE * EXPANSION);
     let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId, graphic.id);
     let regionalMap = getRegionalMap(expandedBoundingBox, overlappingWalls);
@@ -685,34 +685,36 @@ getPathsLists = function (graphic, boundingBox, pageId) {
     return [pathsWithoutGraphic, pathsWithGraphic];
 };
 
-insertionCheck = function (graphic) {
+getValidWallTypeAttribute = function (graphic) {
     if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
         return;
     }
 
-    wallTypeAttribute = getWallTypeAttribute(graphic);
+    let wallTypeAttribute = getWallTypeAttribute(graphic);
     if (!isValidWall(wallTypeAttribute)) {
+        return;
+    }
+    return wallTypeAttribute;
+}
+
+insertionCheck = function (graphic) {
+    let wallTypeAttribute = getValidWallTypeAttribute(graphic);
+    if (!wallTypeAttribute) {
         return;
     }
     let boundingBox = getBoundingBoxForGraphic(graphic);
     let pageId = graphic.get("_pageid");
-    handleInsertion(graphic, boundingBox, pageId);
-    return;
+    handleInsertion(graphic, boundingBox, pageId, wallTypeAttribute);
 };
 
 deletionCheck = function (graphic) {
-    if (graphic.get("layer") !== "objects" && graphic.get("layer") !== "map") {
-        return;
-    }
-
-    wallTypeAttribute = getWallTypeAttribute(graphic);
-    if (!isValidWall(wallTypeAttribute)) {
+    let wallTypeAttribute = getValidWallTypeAttribute(graphic);
+    if (!wallTypeAttribute) {
         return;
     }
     let boundingBox = getBoundingBoxForGraphic(graphic);
     let pageId = graphic.get("_pageid");
-    handleDeletion(graphic, boundingBox, pageId);
-    return;
+    handleDeletion(graphic, boundingBox, pageId, wallTypeAttribute);
 };
 
 getOldBoundingBox = function (previous) {
@@ -731,7 +733,7 @@ movementCheck = function (graphic, previous) {
     }
     let pageId = graphic.get("_pageid");
 
-    wallTypeAttribute = getWallTypeAttribute(graphic);
+    let wallTypeAttribute = getWallTypeAttribute(graphic);
     if (!isValidWall(wallTypeAttribute)) {
         if (
             previous["represents"] !== graphic.get("represents") &&
@@ -740,7 +742,7 @@ movementCheck = function (graphic, previous) {
         ) {
             // The graphic was changed to no longer represent a valid wall, remove wall traces
             let oldBoundingBox = getOldBoundingBox(previous);
-            handleDeletion(graphic, oldBoundingBox, pageId);
+            handleDeletion(graphic, oldBoundingBox, pageId, wallTypeAttribute);
         }
         return;
     }
@@ -749,16 +751,16 @@ movementCheck = function (graphic, previous) {
     let newBoundingBox = getBoundingBoxForGraphic(graphic);
     if (areEqualBoundingBoxes(oldBoundingBox, newBoundingBox)) {
         if (previous["represents"] !== graphic.get("represents")) {
-            handleInsertion(graphic, newBoundingBox, pageId);
+            handleInsertion(graphic, newBoundingBox, pageId, wallTypeAttribute);
         }
         return;
     }
 
     // remove the wall from the old location
-    handleDeletion(graphic, oldBoundingBox, pageId);
+    handleDeletion(graphic, oldBoundingBox, pageId, wallTypeAttribute);
 
     // add the wall to the new location
-    handleInsertion(graphic, newBoundingBox, pageId);
+    handleInsertion(graphic, newBoundingBox, pageId, wallTypeAttribute);
 };
 
 on("ready", function () {
