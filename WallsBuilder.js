@@ -24,8 +24,27 @@ const WALL_TYPE_TO_TILE_TYPE = {
     [WallTypeAttribute.STATIC]: TileType.STATIC,
 };
 
-getTileTypeFromWallTypeAttribute = function (wallTypeAttribute) {
-    return WALL_TYPE_TO_TILE_TYPE[wallTypeAttribute] || TileType.OFF;
+class TileTypeTranslator {
+    constructor() {
+        this.nameToTileType = new Map();
+        this.lastTileType = TileType.DYNAMIC;
+    }
+
+    getTileType(graphicName) {
+        if (!this.nameToTileType.has(graphicName)) {
+            this.nameToTileType.set(graphicName, this.lastTileType++);
+        }
+        return this.nameToTileType.get(graphicName);
+    }
+
+    toString() {
+        return "{" + Array.from(this.nameToTileType.entries(), ([k, v]) => `${k}: ${v}`).join(", ") + "}";
+    }
+}
+
+getTileType = function (tileTypeTranslator, wallTypeAttribute, graphicName) {
+    tileType = WALL_TYPE_TO_TILE_TYPE[wallTypeAttribute] || TileType.OFF;
+    return tileType === TileType.DYNAMIC ? tileTypeTranslator.getTileType(graphicName) : tileType;
 };
 
 class BoundingBox {
@@ -50,14 +69,14 @@ class BoundingBox {
 }
 
 class WallInfo {
-    constructor(graphic, boundingBox, wallType) {
+    constructor(graphic, boundingBox, tileType) {
         this.graphic = graphic;
         this.boundingBox = boundingBox;
-        this.wallType = wallType;
+        this.tileType = tileType;
     }
 
     toString() {
-        return `WallInfo(graphic=${this.graphic.id}}, boundingBox=${this.boundingBox})`;
+        return `WallInfo(graphic=${this.graphic.id}}, boundingBox=${this.boundingBox}, tileType: ${this.tileType})`;
     }
 }
 
@@ -139,6 +158,10 @@ isValidWall = function (wallTypeAttribute) {
     return wallTypeAttribute === WallTypeAttribute.STATIC || wallTypeAttribute == WallTypeAttribute.DYNAMIC;
 };
 
+getGraphicName = function (graphic) {
+    return graphic.get("name");
+}
+
 getWallTypeAttribute = function (graphic) {
     let characterId = graphic.get("represents");
     if (characterId === "") {
@@ -172,7 +195,7 @@ contains = function (container, containee) {
     );
 };
 
-getWallsOverlappingWithBoundingBox = function (boundingBox, pageId, excludedId) {
+getWallsOverlappingWithBoundingBox = function (boundingBox, pageId, excludedId, tileTypeTranslator) {
     let mapTokens = findObjs({
         _pageid: pageId,
         _type: "graphic",
@@ -187,11 +210,12 @@ getWallsOverlappingWithBoundingBox = function (boundingBox, pageId, excludedId) 
         }
         let wallTypeAttribute = getWallTypeAttribute(token);
         if (isValidWall(wallTypeAttribute)) {
+            let graphicName = getGraphicName(token);
             let wallBoundingBox = getBoundingBoxForGraphic(token);
             // log(`Checking wall bounding box: ${wallBoundingBox}`);
             if (areOverlapping(boundingBox, wallBoundingBox)) {
                 validWalls.push(
-                    new WallInfo(token, wallBoundingBox, getTileTypeFromWallTypeAttribute(wallTypeAttribute)),
+                    new WallInfo(token, wallBoundingBox, getTileType(tileTypeTranslator, wallTypeAttribute, graphicName)),
                 );
             }
         }
@@ -232,7 +256,7 @@ getRegionalMap = function (boundingBox, walls) {
     // Assuming STATIC and DYNAMIC walls don't overlap (each group may overlap with itself)
     _.each(walls, function (wall) {
         let wallBoundingBox = wall.boundingBox;
-        let wallType = wall.wallType;
+        let tileType = wall.tileType;
 
         let firstRowIndex = Math.max(0, Math.round((wallBoundingBox.top - boundingBox.top) / TILE_SIZE));
         let rowCount = Math.round(
@@ -251,7 +275,7 @@ getRegionalMap = function (boundingBox, walls) {
         // log(`columnCount: ${columnCount}`);
 
         for (let i = 0; i < rowCount; i++) {
-            tiles[firstRowIndex + i].fill(wallType, firstColumnIndex, firstColumnIndex + columnCount);
+            tiles[firstRowIndex + i].fill(tileType, firstColumnIndex, firstColumnIndex + columnCount);
         }
     });
     // log(`Regional Map: ${prettifyMatrix(tiles)}`);
@@ -264,8 +288,9 @@ isOrthogonalPath = function (selfTileType, otherTileType) {
 
 isDiagonalPath = function (selfTileType, otherTileType1, otherTileType2) {
     return (
-        (selfTileType == TileType.STATIC && otherTileType1 !== TileType.STATIC && otherTileType2 !== TileType.STATIC) ||
-        (selfTileType == TileType.DYNAMIC && otherTileType1 == TileType.OFF && otherTileType2 == TileType.OFF)
+        selfTileType !== TileType.OFF
+        && otherTileType1 !== TileType.STATIC && otherTileType1 !== selfTileType
+        && otherTileType2 !== TileType.STATIC && otherTileType2 !== selfTileType
     );
 };
 
@@ -387,7 +412,7 @@ getDiagonalColor = function (selfTileType, otherTileType1, otherTileType2) {
     if (selfTileType == TileType.STATIC && otherTileType1 == otherTileType2 && otherTileType1 == TileType.OFF) {
         return STATIC_PATHS_COLOR;
     }
-    if (selfTileType == TileType.DYNAMIC && otherTileType1 == otherTileType2 && otherTileType1 == TileType.OFF) {
+    if (selfTileType >= TileType.DYNAMIC && otherTileType1 !== TileType.STATIC && otherTileType2 !== TileType.STATIC) {
         return DYNAMIC_PATHS_COLOR;
     }
     return TRANSITION_PATHS_COLOR;
@@ -673,14 +698,16 @@ handleDeletion = function (graphic, boundingBox, pageId, wallTypeAttribute) {
 };
 
 getPathsLists = function (graphic, boundingBox, pageId, wallTypeAttribute) {
+    let tileTypeTranslator = new TileTypeTranslator();
     let expandedBoundingBox = expandBoundingBox(boundingBox, TILE_SIZE * EXPANSION);
-    let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId, graphic.id);
+    let overlappingWalls = getWallsOverlappingWithBoundingBox(expandedBoundingBox, pageId, graphic.id, tileTypeTranslator);
     let regionalMap = getRegionalMap(expandedBoundingBox, overlappingWalls);
     // log(`regionalMap: ${prettifyMatrix(regionalMap)}`);
-    let tileType = getTileTypeFromWallTypeAttribute(wallTypeAttribute);
+    let tileType = getTileType(tileTypeTranslator, wallTypeAttribute, getGraphicName(graphic));
     let pathsWithoutGraphic = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
     insertCurrentWall(regionalMap, tileType);
     // log(`regionalMap after insertion : ${prettifyMatrix(regionalMap)}`);
+    // log(`tileTypeTranslator : ${tileTypeTranslator}`);
     let pathsWithGraphic = getRequiredPaths(regionalMap, expandedBoundingBox, pageId);
     return [pathsWithoutGraphic, pathsWithGraphic];
 };
