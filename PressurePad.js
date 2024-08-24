@@ -53,11 +53,11 @@ getRefCount = function (objectAttributes) {
     return undefined;
 };
 
-setRefCount = function(graphic, refCount) {
+setRefCount = function (graphic, refCount) {
     let gmNotes = getGMNote(graphic);
     gmNotes[PRESSURE_PAD_ATTRIBUTE][REF_COUNT_ATTRIBUTE] = refCount;
     setGMNoteAttributes(graphic, gmNotes);
-}
+};
 
 getPadsList = function (obj) {
     padsList = [];
@@ -198,16 +198,16 @@ movementCheck = function (obj) {
         let isOn = isOnPad(obj, pad, objRadius);
         let wasOn = wasOnPad(obj, pad, objRadius);
         if (!wasOn && isOn) {
-            // log("onPress");
             if (pad.refCount == undefined || pad.refCount == 0) {
+                // log("onPress");
                 onPress(pad, obj);
             }
             if (pad.refCount !== undefined) {
                 setRefCount(pad.graphic, pad.refCount + 1);
             }
         } else if (wasOn && !isOn) {
-            // log("onRelease");
             if (pad.refCount == undefined || pad.refCount == 1) {
+                // log("onRelease");
                 onRelease(pad, obj);
             }
             if (pad.refCount !== undefined) {
@@ -243,23 +243,24 @@ isIgnored = function (pad, obj) {
 };
 
 isOnPad = function (obj, pad, objRadius) {
-    hypot = Math.ceil(
-        Math.sqrt(
-            Math.pow(pad.graphic.get("left") - obj.get("left"), 2) +
-                Math.pow(pad.graphic.get("top") - obj.get("top"), 2),
-        ),
+    return (
+        obj.get("left") - obj.get("width") / 2 < pad.graphic.get("left") + pad.graphic.get("width") / 2 &&
+        obj.get("left") + obj.get("width") / 2 > pad.graphic.get("left") - pad.graphic.get("width") / 2 &&
+        obj.get("top") - obj.get("height") / 2 < pad.graphic.get("top") + pad.graphic.get("height") / 2 &&
+        obj.get("top") + obj.get("height") / 2 > pad.graphic.get("top") - pad.graphic.get("height") / 2
     );
-    return hypot < objRadius + pad.padRadius;
 };
 
 wasOnPad = function (obj, pad, objRadius) {
     let lastMoveArray = obj.get("lastmove").split(",");
-    let lastX = lastMoveArray[0];
-    let lastY = lastMoveArray[1];
-    hypot = Math.ceil(
-        Math.sqrt(Math.pow(pad.graphic.get("left") - lastX, 2) + Math.pow(pad.graphic.get("top") - lastY, 2)),
+    let lastX = parseInt(lastMoveArray[0]);
+    let lastY = parseInt(lastMoveArray[1]);
+    return (
+        lastX - obj.get("width") / 2 < pad.graphic.get("left") + pad.graphic.get("width") / 2 &&
+        lastX + obj.get("width") / 2 > pad.graphic.get("left") - pad.graphic.get("width") / 2 &&
+        lastY - obj.get("height") / 2 < pad.graphic.get("top") + pad.graphic.get("height") / 2 &&
+        lastY + obj.get("height") / 2 > pad.graphic.get("top") - pad.graphic.get("height") / 2
     );
-    return hypot < objRadius + pad.padRadius;
 };
 
 isCrossed = function (obj, pad, objRadius) {
